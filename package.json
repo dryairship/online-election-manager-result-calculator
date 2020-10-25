@@ -1,0 +1,17 @@
+{
+  "name": "result-calculator",
+  "version": "1.0.0",
+  "description": "Calculates results for elections held on https://github.com/dryairship/online-election-manager",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Priydarshi Singh",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^8.2.0",
+    "fetch-cookie": "^0.10.1",
+    "node-fetch": "^2.6.1",
+    "sjcl-all": "^1.0.1"
+  }
+}
