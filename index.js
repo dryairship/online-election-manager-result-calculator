@@ -1,4 +1,3 @@
-const fs = require('fs');
 const crypto = require('crypto');
 const nodeFetch = require('node-fetch');
 const fetch = require('fetch-cookie')(nodeFetch);
@@ -27,9 +26,6 @@ async function fetchElectionData() {
     let posts = await fetchDataFromUrl("/ceo/fetchPosts");
     let candidates = await fetchDataFromUrl("/ceo/fetchCandidates");
     let votes = await fetchDataFromUrl("/ceo/fetchVotes");
-    fs.writeFileSync('./posts.json', JSON.stringify(posts, null, 4) , 'utf-8');
-    fs.writeFileSync('./candidates.json', JSON.stringify(candidates, null, 4) , 'utf-8');
-    fs.writeFileSync('./votes.json', JSON.stringify(votes, null, 4) , 'utf-8');
     return [posts, candidates, votes];
 }
 
@@ -124,7 +120,6 @@ async function main() {
     
     console.log("Starting result calculation.");
     let result = calculateAllResults(ceoKey, posts, candidates, votes);
-    fs.writeFileSync('./result.json', JSON.stringify(result, null, 4) , 'utf-8');
     console.log("Results calculated.");
     
     console.log("Sending the results to the server...");
