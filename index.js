@@ -31,19 +31,19 @@ async function fetchElectionData() {
 
 function getCategorizedVotesAndCandidates(fetchedPosts, fetchedCandidates, fetchedVotes) {
     let categories = {};
-    fetchedPosts.forEach(post => categories[post.postid] = {votes:[], candidates:[]});
-    fetchedVotes.forEach(vote => categories[vote.postid].votes.push(vote.data));
-    fetchedCandidates.forEach(candidate => categories[candidate.PostID].candidates.push(candidate));
+    fetchedPosts.forEach(post => categories[post.postId] = {votes:[], candidates:[]});
+    fetchedVotes.forEach(vote => categories[vote.postId].votes.push(vote.data));
+    fetchedCandidates.forEach(candidate => categories[candidate.postId].candidates.push(candidate));
     return categories;
 }
 
-function calculateResultsForPost(ceoKey, candidates, votes) {
+function calculateResultsForPost(ceoKey, candidates, votes, hasNota) {
     candidates.forEach(candidate => {
         candidate.preference1 = 0;
         candidate.preference2 = 0;
         candidate.preference3 = 0;
-        candidate.roll = candidate.Roll;
-        candidate.name = candidate.Name;
+        candidate.roll = candidate.roll;
+        candidate.name = candidate.name;
     });
     let count = 0, progress = 0, total = votes.length, numNOTA=0;
     let strippedVotes = votes.map(vote => {
@@ -59,23 +59,25 @@ function calculateResultsForPost(ceoKey, candidates, votes) {
     let splitVotes = strippedVotes.map(vote => vote.split("-"));
     splitVotes.forEach(vote => {
         candidates.forEach(candidate => {
-            if(candidate.Roll == vote[1]){
+            if(candidate.roll == vote[1]){
                 candidate.preference1 += 1;
-            }else if(candidate.Roll == vote[2]){
+            }else if(candidate.roll == vote[2]){
                 candidate.preference2 += 1;
-            }else if(candidate.Roll == vote[3]){
+            }else if(candidate.roll == vote[3]){
                 candidate.preference3 += 1;
             }
         });
     });
     numNOTA = strippedVotes.filter(vote => vote.endsWith("-0-0-0")).length;
-    candidates.push({
-        preference1: numNOTA,
-        preference2: 0,
-        preference3: 0,
-        roll: "0",
-        name: "NOTA",
-    });
+    if(hasNota) {
+        candidates.push({
+            preference1: numNOTA,
+            preference2: 0,
+            preference3: 0,
+            roll: "0",
+            name: "NOTA",
+        });
+    }
     process.stdout.write("\n");
     return [strippedVotes, candidates];
 }
@@ -84,11 +86,12 @@ function calculateAllResults(ceoKey, fetchedPosts, fetchedCandidates, fetchedVot
     let categorizedData = getCategorizedVotesAndCandidates(fetchedPosts, fetchedCandidates, fetchedVotes);
     let posts = fetchedPosts;
     posts.forEach(post => {
-        console.log("Calculating results for the post: ", post.postname);
+        console.log("Calculating results for the post: ", post.postName);
         let result = calculateResultsForPost(
             ceoKey,
-            categorizedData[post.postid].candidates,
-            categorizedData[post.postid].votes,
+            categorizedData[post.postId].candidates,
+            categorizedData[post.postId].votes,
+            post.hasNota,
         );
         post.candidates = result[1];
         post.ballotIds = result[0];
@@ -106,7 +109,7 @@ async function main() {
         return;
     }
     let ceoKey = new sjcl.ecc.elGamal.secretKey(sjcl.ecc.curves.c256,
-        sjcl.ecc.curves.c256.field.fromBits(sjcl.codec.base64.toBits(sjcl.decrypt(process.env.CEO_PASSWORD, ceoData.privatekey)))
+        sjcl.ecc.curves.c256.field.fromBits(sjcl.codec.base64.toBits(sjcl.decrypt(process.env.CEO_PASSWORD, ceoData.privateKey)))
     );
     console.log("Login successful.");
     
