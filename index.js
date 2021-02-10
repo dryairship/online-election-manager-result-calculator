@@ -1,3 +1,4 @@
+const fs = require('fs');
 const crypto = require('crypto');
 const nodeFetch = require('node-fetch');
 const fetch = require('fetch-cookie')(nodeFetch);
@@ -9,23 +10,29 @@ async function login() {
     let params = new URLSearchParams();
     params.append("roll", process.env.CEO_ROLL);
     params.append("pass", crypto.createHash('sha256').update(process.env.CEO_PASSWORD).digest('hex'));
-    let response = await fetch(process.env.BASE_URL+"/users/login", {method: 'POST', body: params});
-    if(!response.ok) return false;
+    let response = await fetch(process.env.BASE_URL+"/api/users/login", {method: 'POST', body: params});
+    if(!response.ok){
+        console.log(await response.text());
+        return false;
+    }
     let json = await response.json();
     return json;
 }
 
 async function fetchDataFromUrl(url) {
     let response = await fetch(process.env.BASE_URL+url);
-    if(!response.ok) return false;
+    if(!response.ok){
+        console.log(await response.text());
+        return false;
+    }
     let json = await response.json();
     return json;
 }
 
 async function fetchElectionData() {
-    let posts = await fetchDataFromUrl("/ceo/fetchPosts");
-    let candidates = await fetchDataFromUrl("/ceo/fetchCandidates");
-    let votes = await fetchDataFromUrl("/ceo/fetchVotes");
+    let posts = await fetchDataFromUrl("/api/ceo/fetchPosts");
+    let candidates = await fetchDataFromUrl("/api/ceo/fetchCandidates");
+    let votes = await fetchDataFromUrl("/api/ceo/fetchVotes");
     return [posts, candidates, votes];
 }
 
@@ -38,6 +45,8 @@ function getCategorizedVotesAndCandidates(fetchedPosts, fetchedCandidates, fetch
 }
 
 function calculateResultsForPost(ceoKey, candidates, votes, hasNota) {
+    let numCandidates = candidates.length;
+    let numToBeSelected = Math.min(3, numCandidates);
     candidates.forEach(candidate => {
         candidate.preference1 = 0;
         candidate.preference2 = 0;
@@ -57,7 +66,30 @@ function calculateResultsForPost(ceoKey, candidates, votes, hasNota) {
         }
     });
     let splitVotes = strippedVotes.map(vote => vote.split("-"));
+    let unparseableVotes = 0;
+    splitVotes = splitVotes.filter(vote => {
+        if(vote[0]=="0"){
+            unparseableVotes += 1;
+            return false;
+        }
+        return true;
+    })
     splitVotes.forEach(vote => {
+        if(hasNota && vote[1]=="0" && vote[2]=="0" && vote[3]=="0") {
+            return;
+        }
+        for(let i=1; i<=numToBeSelected; i++){
+            if(vote[i]=="0") {
+                console.log("Discarding invalid vote: "+ vote.join("-"));
+                return;
+            }
+        }
+        for(let i=numToBeSelected+1; i<=3; i++){
+            if(vote[i]!="0") {
+                console.log("Discarding invalid vote: "+ vote.join("-"));
+                return;
+            }
+        }
         candidates.forEach(candidate => {
             if(candidate.roll == vote[1]){
                 candidate.preference1 += 1;
@@ -77,8 +109,13 @@ function calculateResultsForPost(ceoKey, candidates, votes, hasNota) {
             roll: "0",
             name: "NOTA",
         });
+    } else if (numNOTA > 0) {
+        console.log("Found "+ numNOTA +" NOTA votes, but post doesn't allow NOTA. Discarding them.")
     }
     process.stdout.write("\n");
+    if(unparseableVotes > 0) {
+        console.log("Found "+ unparseableVotes +" unparseable vote(s).");
+    }
     return [strippedVotes, candidates];
 }
 
@@ -99,6 +136,42 @@ function calculateAllResults(ceoKey, fetchedPosts, fetchedCandidates, fetchedVot
     return {
         posts: posts
     };
+}
+
+const compareCandidates = (a, b) => {
+    // if +ve => b comes before a
+    // if -ve => a comes before b
+    if(a.preference1 === b.preference1){
+      if(a.preference2 === b.preference2)
+        return b.preference3-a.preference3;
+      else
+        return b.preference2-a.preference2;
+    }else{
+      return b.preference1-a.preference1;
+    }
+  }
+
+function displayResults(post) {
+    let nameLen = 32;
+    let prefLen = 6;
+    let extra = 3*5;
+    let totalLen = extra+nameLen+(prefLen*3);
+    console.log("=".padEnd(totalLen, "="));
+    console.log((" | Post: "+post.postName).padEnd(totalLen-3)+" | ");
+    console.log("-".padEnd(totalLen, "-"));
+    console.log(" | Roll - Name".padEnd(nameLen+3)+" | Pref 1 | Pref 2 | Pref 3 |");
+    console.log("-".padEnd(totalLen, "-"));
+    post.candidates.sort(compareCandidates).forEach(candidate => {
+        let cname = (candidate.roll+" - "+candidate.name).padEnd(nameLen);
+        let p1 = (""+candidate.preference1).padEnd(prefLen);
+        let p2 = (""+candidate.preference2).padEnd(prefLen);
+        let p3 = (""+candidate.preference3).padEnd(prefLen);
+        console.log(" | "+cname+" | "+p1+" | "+p2+" | "+p3+" | ");
+    });
+    console.log("-".padEnd(totalLen, "-"));
+    console.log("");
+    console.log("");
+    console.log("");
 }
 
 async function main() {
@@ -124,9 +197,16 @@ async function main() {
     console.log("Starting result calculation.");
     let result = calculateAllResults(ceoKey, posts, candidates, votes);
     console.log("Results calculated.");
+    console.log("");
+    console.log("");
+    console.log("");
+    
+    fs.writeFileSync('results.json', JSON.stringify(result, null, 4) , 'utf-8');
+    
+    result.posts.forEach(post => displayResults(post));
     
     console.log("Sending the results to the server...");
-    let response = await fetch(process.env.BASE_URL+"/ceo/submitResults", {method: 'POST', body: JSON.stringify(result)});
+    let response = await fetch(process.env.BASE_URL+"/api/ceo/submitResults", {method: 'POST', body: JSON.stringify(result)});
     let text = await response.text();
     console.log("Results sent to the server.");
     console.log("Server's response: ", text);
